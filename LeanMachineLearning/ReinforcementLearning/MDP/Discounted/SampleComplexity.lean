@@ -101,4 +101,71 @@ theorem card_signPatterns {X : Type*} [Fintype X] [DecidableEq X] :
 
 /-! End of step 1. -/
 
+/-! ## Step 2. Samples and the empirical model (G1, G2, G3) -/
+
+open MeasureTheory
+
+variable {Ω : Type*} [MeasurableSpace Ω] [MeasurableSpace S] [DecidableEq S]
+
+namespace FiniteMDP
+
+/-- **G1.** `N` samples for every state-action pair, drawn from the transitions of `M`.
+Book Section 2.1. Only the samples of one pair are assumed independent, which is all the
+proof uses. -/
+structure GenerativeSamples (M : FiniteMDP S A) (N : ℕ) (μ : Measure Ω) where
+  /-- `X s a i ω` is the `i`-th next state sampled from the pair `(s, a)`. -/
+  X : S → A → Fin N → Ω → S
+  measurable : ∀ s a i, Measurable (X s a i)
+  /-- The samples of one pair are independent. -/
+  indep : ∀ s a, ProbabilityTheory.iIndepFun (fun i => X s a i) μ
+  /-- Each sample lands on `s'` with probability `P s a s'`. -/
+  law : ∀ s a i s', μ.real {ω | X s a i ω = s'} = M.P s a s'
+
+namespace GenerativeSamples
+
+variable {M : FiniteMDP S A} {N : ℕ} {μ : Measure Ω} (G : M.GenerativeSamples N μ)
+
+/-- **G2.** The empirical transition model, the share of the samples of `(s, a)` that
+land on `s'`. Book Section 2.1. -/
+def empiricalP (ω : Ω) (s : S) (a : A) (s' : S) : ℝ :=
+  ((Finset.univ.filter fun i => G.X s a i ω = s').card : ℝ) / N
+
+/-- **G3.** The empirical probabilities are nonnegative. -/
+theorem empiricalP_nonneg (ω : Ω) (s : S) (a : A) (s' : S) : 0 ≤ G.empiricalP ω s a s' := by
+  unfold empiricalP
+  positivity
+
+/-- **G3.** With at least one sample, the empirical probabilities of each pair add up to one. -/
+theorem sum_empiricalP (hN : 0 < N) (ω : Ω) (s : S) (a : A) :
+    ∑ s', G.empiricalP ω s a s' = 1 := by
+  have hcount : ∑ s', ((Finset.univ.filter fun i => G.X s a i ω = s').card : ℝ) = N := by
+    simp only [Finset.card_filter, Nat.cast_sum, Nat.cast_ite, Nat.cast_one, Nat.cast_zero]
+    rw [Finset.sum_comm]
+    simp
+  have hN' : (N : ℝ) ≠ 0 := by exact_mod_cast hN.ne'
+  unfold empiricalP
+  rw [← Finset.sum_div, hcount, div_self hN']
+
+/-- **G3.** With at least one sample, the empirical model is a finite discounted MDP with the
+rewards and the discount of `M`. -/
+def empiricalMDP (hN : 0 < N) (ω : Ω) : FiniteMDP S A where
+  P := G.empiricalP ω
+  P_nonneg s a s' := G.empiricalP_nonneg ω s a s'
+  P_sum s a := G.sum_empiricalP hN ω s a
+  r := M.r
+  γ := M.γ
+  γ_lt_one := M.γ_lt_one
+
+theorem empiricalMDP_P (hN : 0 < N) (ω : Ω) : (G.empiricalMDP hN ω).P = G.empiricalP ω := rfl
+
+theorem empiricalMDP_r (hN : 0 < N) (ω : Ω) : (G.empiricalMDP hN ω).r = M.r := rfl
+
+theorem empiricalMDP_γ (hN : 0 < N) (ω : Ω) : (G.empiricalMDP hN ω).γ = M.γ := rfl
+
+end GenerativeSamples
+
+end FiniteMDP
+
+/-! End of step 2. -/
+
 end Learning
