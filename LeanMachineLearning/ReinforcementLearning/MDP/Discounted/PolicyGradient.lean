@@ -299,4 +299,182 @@ end FiniteMDP
 
 /-! End of step 2. -/
 
+/-! ## Step 3, part 1. Values and occupancies move continuously with the policy -/
+
+open Filter Topology
+
+/-- The l1 distance between two policies at one state is at most their total l1 distance
+over all states. -/
+theorem StationaryPolicy.sum_abs_sub_le_sum_sum (π π' : StationaryPolicy S A) (s : S) :
+    ∑ a, |π'.prob s a - π.prob s a| ≤ ∑ s', ∑ a, |π'.prob s' a - π.prob s' a| :=
+  Finset.single_le_sum (f := fun s' => ∑ a, |π'.prob s' a - π.prob s' a|)
+    (fun s' _ => Finset.sum_nonneg fun a _ => abs_nonneg _) (Finset.mem_univ s)
+
+namespace FiniteMDP
+
+variable (M : FiniteMDP S A)
+
+/-- Values are continuous in the policy. If the action probabilities of a family of policies
+converge to those of `π₀`, the values converge to the values of `π₀`. This follows from L16,
+and works for any kind of limit, sequences and `t → t₀` alike. -/
+theorem tendsto_value [Nonempty S] {ι : Type*} {l : Filter ι} (π : ι → StationaryPolicy S A)
+    (π₀ : StationaryPolicy S A)
+    (h : ∀ s a, Tendsto (fun i => (π i).prob s a) l (𝓝 (π₀.prob s a))) (s₀ : S) :
+    Tendsto (fun i => M.value (π i) s₀) l (𝓝 (M.value π₀ s₀)) := by
+  -- the total l1 distance between the action distributions goes to zero
+  have hδ : Tendsto (fun i => ∑ s, ∑ a, |(π i).prob s a - π₀.prob s a|) l (𝓝 0) := by
+    have h1 : Tendsto (fun i => ∑ s, ∑ a, |(π i).prob s a - π₀.prob s a|) l
+        (𝓝 (∑ s : S, ∑ a : A, |π₀.prob s a - π₀.prob s a|)) := by
+      refine tendsto_finsetSum _ fun s _ => ?_
+      refine tendsto_finsetSum _ fun a _ => ?_
+      exact ((h s a).sub_const (π₀.prob s a)).abs
+    have h0 : ∑ s : S, ∑ a : A, |π₀.prob s a - π₀.prob s a| = 0 := by simp
+    rwa [h0] at h1
+  -- so does the bound of L16
+  have hC : Tendsto (fun i => ‖M.r‖ * (∑ s, ∑ a, |(π i).prob s a - π₀.prob s a|) /
+      (1 - (M.γ : ℝ)) ^ 2) l (𝓝 0) := by
+    have h2 := (hδ.const_mul ‖M.r‖).div_const ((1 - (M.γ : ℝ)) ^ 2)
+    rwa [mul_zero, zero_div] at h2
+  -- at every index, L16 bounds the distance between the values
+  have hbound : ∀ i, ‖M.value (π i) s₀ - M.value π₀ s₀‖ ≤
+      ‖M.r‖ * (∑ s, ∑ a, |(π i).prob s a - π₀.prob s a|) / (1 - (M.γ : ℝ)) ^ 2 := by
+    intro i
+    calc ‖M.value (π i) s₀ - M.value π₀ s₀‖ = ‖(M.value (π i) - M.value π₀) s₀‖ := rfl
+      _ ≤ ‖M.value (π i) - M.value π₀‖ := norm_le_pi_norm _ s₀
+      _ ≤ ‖M.r‖ * (∑ s, ∑ a, |(π i).prob s a - π₀.prob s a|) / (1 - (M.γ : ℝ)) ^ 2 :=
+          M.norm_value_sub_value_le π₀ (π i) fun s => π₀.sum_abs_sub_le_sum_sum (π i) s
+  rw [tendsto_iff_norm_sub_tendsto_zero]
+  exact squeeze_zero (fun i => norm_nonneg _) hbound hC
+
+/-- The occupancy is continuous in the policy too, by `tendsto_value` for the indicator
+rewards. This is what lets T5 replace the occupancy of `π t` by the one of `π t₀` in the
+limit. -/
+theorem tendsto_occupancy [Nonempty S] {ι : Type*} {l : Filter ι} (μ : S → ℝ)
+    (π : ι → StationaryPolicy S A) (π₀ : StationaryPolicy S A)
+    (h : ∀ s a, Tendsto (fun i => (π i).prob s a) l (𝓝 (π₀.prob s a))) (s : S) :
+    Tendsto (fun i => M.occupancy μ (π i) s) l (𝓝 (M.occupancy μ π₀ s)) := by
+  unfold occupancy
+  refine Tendsto.const_mul _ ?_
+  refine tendsto_finsetSum _ fun s₀ _ => ?_
+  refine Tendsto.const_mul _ ?_
+  exact (M.withReward (stateIndicator s)).tendsto_value π π₀ h s₀
+
+end FiniteMDP
+
+/-! End of step 3, part 1. -/
+
+/-! ## Step 3, part 2. The policy gradient theorem (T5) -/
+
+/-- When the action probabilities are positive, the derivative of `π(a | s)` is `π(a | s)`
+times the derivative of `log π(a | s)`. This turns T5 into the book's `∇ log π` form. -/
+theorem prob_mul_deriv_log (π : ℝ → StationaryPolicy S A) (g : S → A → ℝ) (t₀ : ℝ)
+    (hπ : ∀ s a, HasDerivAt (fun t => (π t).prob s a) (g s a) t₀)
+    (hpos : ∀ s a, 0 < (π t₀).prob s a) (s : S) (a : A) :
+    (π t₀).prob s a * deriv (fun t => Real.log ((π t).prob s a)) t₀ = g s a := by
+  rw [((hπ s a).log (hpos s a).ne').deriv]
+  exact mul_div_cancel₀ (g s a) (hpos s a).ne'
+
+namespace FiniteMDP
+
+variable (M : FiniteMDP S A)
+
+/-- **T5.** The policy gradient theorem, book Theorem 9.4, `Q` form. Take a path of policies
+`t ↦ π t` whose action probabilities have derivatives `g s a` at `t₀`. Then the value from
+`μ` has a derivative at `t₀`, and it is the occupancy average of `∑ a, g s a * Q(s, a)`
+divided by `1 - γ`. The path `θ + t eᵢ` gives each partial derivative. The proof goes through
+the performance difference lemma and L16 instead of trajectories, so the book's assumption
+that derivatives can be exchanged with infinite sums is not needed. -/
+theorem hasDerivAt_startValue [Nonempty S] (μ : S → ℝ) (π : ℝ → StationaryPolicy S A)
+    (g : S → A → ℝ) (t₀ : ℝ) (hπ : ∀ s a, HasDerivAt (fun t => (π t).prob s a) (g s a) t₀) :
+    HasDerivAt (fun t => M.startValue μ (π t))
+      ((∑ s, M.occupancy μ (π t₀) s * ∑ a, g s a * M.qValue (π t₀) s a) /
+        (1 - (M.γ : ℝ))) t₀ := by
+  -- the occupancy moves continuously with `t`, by part 1
+  have hd : ∀ s, Tendsto (fun t => M.occupancy μ (π t) s) (𝓝[≠] t₀)
+      (𝓝 (M.occupancy μ (π t₀) s)) := fun s =>
+    (M.tendsto_occupancy μ π (π t₀) (fun s' a => (hπ s' a).continuousAt.tendsto) s).mono_left
+      nhdsWithin_le_nhds
+  -- the slopes of the action probabilities converge to their derivatives
+  have hg : ∀ s a, Tendsto (slope (fun u => (π u).prob s a) t₀) (𝓝[≠] t₀) (𝓝 (g s a)) :=
+    fun s a => hasDerivAt_iff_tendsto_slope.mp (hπ s a)
+  -- by the performance difference lemma, the slope of the value is an occupancy average
+  have hslope : slope (fun t => M.startValue μ (π t)) t₀ = fun t =>
+      (∑ s, M.occupancy μ (π t) s *
+        ∑ a, slope (fun u => (π u).prob s a) t₀ t * M.qValue (π t₀) s a) /
+        (1 - (M.γ : ℝ)) := by
+    funext t
+    rw [slope_def_field, M.startValue_sub_startValue μ (π t) (π t₀)]
+    simp only [M.avg_advantage_eq (π t₀) (π t), slope_def_field]
+    rw [div_right_comm]
+    congr 1
+    rw [Finset.sum_div]
+    refine Finset.sum_congr rfl fun s _ => ?_
+    rw [mul_div_assoc, Finset.sum_div]
+    congr 1
+    refine Finset.sum_congr rfl fun a _ => ?_
+    ring
+  -- now pass to the limit term by term
+  refine hasDerivAt_iff_tendsto_slope.mpr ?_
+  refine Tendsto.congr (fun t => (congrFun hslope t).symm) ?_
+  refine Tendsto.div_const ?_ _
+  refine tendsto_finsetSum _ fun s _ => ?_
+  refine (hd s).mul ?_
+  refine tendsto_finsetSum _ fun a _ => ?_
+  exact (hg s a).mul_const _
+
+/-- **T5.** The policy gradient theorem, book Theorem 9.4, advantage form. The derivatives of
+the action probabilities at each state add up to zero, so `Q` can be replaced by the
+advantage. -/
+theorem hasDerivAt_startValue_advantage [Nonempty S] (μ : S → ℝ)
+    (π : ℝ → StationaryPolicy S A) (g : S → A → ℝ) (t₀ : ℝ)
+    (hπ : ∀ s a, HasDerivAt (fun t => (π t).prob s a) (g s a) t₀) :
+    HasDerivAt (fun t => M.startValue μ (π t))
+      ((∑ s, M.occupancy μ (π t₀) s * ∑ a, g s a * M.advantage (π t₀) s a) /
+        (1 - (M.γ : ℝ))) t₀ := by
+  -- the probabilities at each state always add up to one, so their derivatives add up to zero
+  have hg0 : ∀ s, ∑ a, g s a = 0 := by
+    intro s
+    have h1 : HasDerivAt (fun t => ∑ a, (π t).prob s a) (∑ a, g s a) t₀ :=
+      HasDerivAt.fun_sum fun a _ => hπ s a
+    have h2 : HasDerivAt (fun t => ∑ a, (π t).prob s a) 0 t₀ := by
+      have h3 : (fun t => ∑ a, (π t).prob s a) = fun _ => (1 : ℝ) := by
+        funext t
+        exact (π t).sum_eq_one s
+      rw [h3]
+      exact hasDerivAt_const _ _
+    exact h1.unique h2
+  have hsum : ∀ s, ∑ a, g s a * M.advantage (π t₀) s a = ∑ a, g s a * M.qValue (π t₀) s a := by
+    intro s
+    simp only [advantage, mul_sub, Finset.sum_sub_distrib, ← Finset.sum_mul, hg0 s, zero_mul,
+      sub_zero]
+  simp only [hsum]
+  exact M.hasDerivAt_startValue μ π g t₀ hπ
+
+/-- **T5.** Book Theorem 9.4 in the book's own notation, with `∇ log π`, `Q` form. -/
+theorem hasDerivAt_startValue_log [Nonempty S] (μ : S → ℝ) (π : ℝ → StationaryPolicy S A)
+    (g : S → A → ℝ) (t₀ : ℝ) (hπ : ∀ s a, HasDerivAt (fun t => (π t).prob s a) (g s a) t₀)
+    (hpos : ∀ s a, 0 < (π t₀).prob s a) :
+    HasDerivAt (fun t => M.startValue μ (π t))
+      ((∑ s, M.occupancy μ (π t₀) s * ∑ a, (π t₀).prob s a *
+        deriv (fun t => Real.log ((π t).prob s a)) t₀ * M.qValue (π t₀) s a) /
+        (1 - (M.γ : ℝ))) t₀ := by
+  simp only [prob_mul_deriv_log π g t₀ hπ hpos]
+  exact M.hasDerivAt_startValue μ π g t₀ hπ
+
+/-- **T5.** Book Theorem 9.4 in the book's own notation, with `∇ log π`, advantage form. -/
+theorem hasDerivAt_startValue_advantage_log [Nonempty S] (μ : S → ℝ)
+    (π : ℝ → StationaryPolicy S A) (g : S → A → ℝ) (t₀ : ℝ)
+    (hπ : ∀ s a, HasDerivAt (fun t => (π t).prob s a) (g s a) t₀)
+    (hpos : ∀ s a, 0 < (π t₀).prob s a) :
+    HasDerivAt (fun t => M.startValue μ (π t))
+      ((∑ s, M.occupancy μ (π t₀) s * ∑ a, (π t₀).prob s a *
+        deriv (fun t => Real.log ((π t).prob s a)) t₀ * M.advantage (π t₀) s a) /
+        (1 - (M.γ : ℝ))) t₀ := by
+  simp only [prob_mul_deriv_log π g t₀ hπ hpos]
+  exact M.hasDerivAt_startValue_advantage μ π g t₀ hπ
+
+end FiniteMDP
+
+/-! End of step 3. -/
+
 end Learning
