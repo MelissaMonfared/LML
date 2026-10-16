@@ -577,4 +577,89 @@ theorem hasDerivAt_log_softmaxProb_coord (θ : S → A → ℝ) (s' : S) (a' : A
 
 /-! End of step 4. -/
 
+/-! ## Step 5. The softmax policy gradient (T6) -/
+
+/-- Summing against the indicator of `(s', a')` picks out the action `a'`, and only at the
+state `s'`. -/
+theorem sum_mul_pairIndicator (w : A → ℝ) (s' : S) (a' : A) (s : S) :
+    ∑ a, w a * pairIndicator s' a' s a = if s = s' then w a' else 0 := by
+  by_cases hs : s = s'
+  · subst hs
+    simp [pairIndicator, mul_ite]
+  · simp [pairIndicator, hs]
+
+namespace FiniteMDP
+
+variable (M : FiniteMDP S A)
+
+/-- The advantage of a policy averages to zero under that same policy. -/
+theorem avg_advantage_self (π : StationaryPolicy S A) (s : S) :
+    π.avg (M.advantage π) s = 0 := by
+  rw [M.avg_advantage_eq π π s]
+  simp
+
+/-- The inner sum of T6 at one state. Only the state `s'` survives, with the term
+`π_θ(a' | s') A(s', a')`. -/
+theorem sum_softmax_deriv_mul_advantage (θ : S → A → ℝ) (s' : S) (a' : A) (s : S) :
+    ∑ a, softmaxProb θ s a *
+        (pairIndicator s' a' s a - if s = s' then softmaxProb θ s a' else 0) *
+        M.advantage (StationaryPolicy.softmax θ) s a =
+      if s = s' then softmaxProb θ s a' * M.advantage (StationaryPolicy.softmax θ) s a'
+      else 0 := by
+  -- the advantage averages to zero under the softmax policy itself
+  have hzero : ∑ a, softmaxProb θ s a * M.advantage (StationaryPolicy.softmax θ) s a = 0 :=
+    M.avg_advantage_self (StationaryPolicy.softmax θ) s
+  -- split off the part of the derivative that does not depend on the action
+  have hsplit : ∑ a, softmaxProb θ s a *
+        (pairIndicator s' a' s a - if s = s' then softmaxProb θ s a' else 0) *
+        M.advantage (StationaryPolicy.softmax θ) s a =
+      ∑ a, softmaxProb θ s a * M.advantage (StationaryPolicy.softmax θ) s a *
+          pairIndicator s' a' s a -
+        (if s = s' then softmaxProb θ s a' else 0) *
+          ∑ a, softmaxProb θ s a * M.advantage (StationaryPolicy.softmax θ) s a := by
+    rw [Finset.mul_sum, ← Finset.sum_sub_distrib]
+    refine Finset.sum_congr rfl fun a _ => ?_
+    ring
+  rw [hsplit, hzero, mul_zero, sub_zero, sum_mul_pairIndicator]
+
+/-- **T6.** The softmax policy gradient, book Lemma 10.2. Moving only `θ(s', a')`, the value
+from `μ` has derivative `d(s') π_θ(a' | s') A(s', a') / (1 - γ)`, where `d` is the occupancy
+of the softmax policy from `μ` and `A` is its advantage. -/
+theorem hasDerivAt_startValue_softmax [Nonempty S] (μ : S → ℝ) (θ : S → A → ℝ) (s' : S)
+    (a' : A) :
+    HasDerivAt
+      (fun t : ℝ => M.startValue μ (StationaryPolicy.softmax (θ + t • pairIndicator s' a')))
+      (M.occupancy μ (StationaryPolicy.softmax θ) s' * softmaxProb θ s' a' *
+        M.advantage (StationaryPolicy.softmax θ) s' a' / (1 - (M.γ : ℝ))) 0 := by
+  -- the derivatives of the softmax probabilities in the direction of `θ(s', a')`, by L17
+  have hπ : ∀ s a, HasDerivAt
+      (fun t : ℝ => (StationaryPolicy.softmax (θ + t • pairIndicator s' a')).prob s a)
+      (softmaxProb θ s a *
+        (pairIndicator s' a' s a - if s = s' then softmaxProb θ s a' else 0)) 0 := by
+    intro s a
+    have h := hasDerivAt_softmaxProb θ (pairIndicator s' a') 0 s a
+    simp only [zero_smul, add_zero, sum_softmaxProb_mul_pairIndicator] at h
+    exact h
+  -- T5 in the advantage form, at `t = 0`
+  have h := M.hasDerivAt_startValue_advantage μ
+    (fun t : ℝ => StationaryPolicy.softmax (θ + t • pairIndicator s' a')) _ 0 hπ
+  simp only [zero_smul, add_zero] at h
+  refine h.congr_deriv ?_
+  -- only the pair `(s', a')` survives in the occupancy average
+  simp only [M.sum_softmax_deriv_mul_advantage θ s' a']
+  have hX : (if s' = s' then softmaxProb θ s' a' *
+      M.advantage (StationaryPolicy.softmax θ) s' a' else 0) =
+      softmaxProb θ s' a' * M.advantage (StationaryPolicy.softmax θ) s' a' := by
+    simp
+  rw [Finset.sum_eq_single s', hX]
+  · ring
+  · intro b _ hb
+    simp [hb]
+  · intro h'
+    exact absurd (Finset.mem_univ s') h'
+
+end FiniteMDP
+
+/-! End of step 5. -/
+
 end Learning
