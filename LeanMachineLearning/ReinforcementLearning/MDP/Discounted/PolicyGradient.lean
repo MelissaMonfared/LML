@@ -189,4 +189,114 @@ end FiniteMDP
 
 /-! End of step 1. -/
 
+/-! ## Step 2. Performance difference with occupancies (O3) and continuity in the policy -/
+
+namespace FiniteMDP
+
+variable (M : FiniteMDP S A)
+
+/-- The occupancy does not depend on the reward. -/
+theorem occupancy_withReward (ρ : S → A → ℝ) (μ : S → ℝ) (π : StationaryPolicy S A) :
+    (M.withReward ρ).occupancy μ π = M.occupancy μ π := rfl
+
+/-- **O3.** The performance difference lemma in the book's form, Lemma 1.16. The occupancy
+is the one of the first policy and the advantage the one of the second. -/
+theorem startValue_sub_startValue (μ : S → ℝ) (π π' : StationaryPolicy S A) :
+    M.startValue μ π - M.startValue μ π' =
+      (∑ s, M.occupancy μ π s * π.avg (M.advantage π') s) / (1 - (M.γ : ℝ)) := by
+  have h12 := M.value_sub_value_eq π π'
+  have hstart : M.startValue μ π - M.startValue μ π' =
+      (M.withReward (M.advantage π')).startValue μ π := by
+    unfold startValue
+    rw [← Finset.sum_sub_distrib]
+    refine Finset.sum_congr rfl fun s₀ _ => ?_
+    rw [← mul_sub]
+    congr 1
+    exact congrFun h12 s₀
+  rw [hstart, (M.withReward (M.advantage π')).startValue_eq μ π, M.occupancy_withReward]
+  rfl
+
+/-- Averaging the advantage of `π` under `π'` only sees the difference of the two policies. -/
+theorem avg_advantage_eq (π π' : StationaryPolicy S A) (s : S) :
+    π'.avg (M.advantage π) s = ∑ a, (π'.prob s a - π.prob s a) * M.qValue π s a := by
+  have hV : M.value π s = ∑ a, π.prob s a * M.qValue π s a :=
+    congrFun (M.value_eq_avg_qValue π) s
+  simp only [StationaryPolicy.avg, advantage, mul_sub, sub_mul, Finset.sum_sub_distrib,
+    ← Finset.sum_mul, π'.sum_eq_one s, one_mul]
+  rw [hV]
+
+/-- A sharper form of L9. The value is bounded by the reward averaged by the policy. -/
+theorem norm_value_le_rewardPi (π : StationaryPolicy S A) :
+    ‖M.value π‖ ≤ ‖M.rewardPi π‖ / (1 - (M.γ : ℝ)) := by
+  have hγ1 : (M.γ : ℝ) < 1 := by exact_mod_cast M.γ_lt_one
+  have key : ‖M.value π‖ ≤ ‖M.rewardPi π‖ + (M.γ : ℝ) * ‖M.value π‖ := by
+    have hnn : 0 ≤ ‖M.rewardPi π‖ + (M.γ : ℝ) * ‖M.value π‖ := by positivity
+    rw [pi_norm_le_iff_of_nonneg hnn]
+    intro s
+    have hfix := congrFun (M.evalOp_value π) s
+    rw [← hfix]
+    have h1 : |M.rewardPi π s| ≤ ‖M.rewardPi π‖ := by
+      have h := norm_le_pi_norm (M.rewardPi π) s
+      rwa [Real.norm_eq_abs] at h
+    have h2 : |∑ s', M.transPi π s s' * M.value π s'| ≤ ‖M.value π‖ :=
+      abs_sum_mul_le_norm (M.transPi_nonneg π s) (M.sum_transPi π s) (M.value π)
+    calc ‖M.evalOp π (M.value π) s‖
+        = ‖M.rewardPi π s + (M.γ : ℝ) * ∑ s', M.transPi π s s' * M.value π s'‖ := rfl
+      _ ≤ ‖M.rewardPi π s‖ + ‖(M.γ : ℝ) * ∑ s', M.transPi π s s' * M.value π s'‖ :=
+          norm_add_le _ _
+      _ = |M.rewardPi π s| + (M.γ : ℝ) * |∑ s', M.transPi π s s' * M.value π s'| := by
+          rw [norm_mul, Real.norm_of_nonneg M.gamma_nonneg, Real.norm_eq_abs (M.rewardPi π s),
+            Real.norm_eq_abs (∑ s', M.transPi π s s' * M.value π s')]
+      _ ≤ ‖M.rewardPi π‖ + (M.γ : ℝ) * ‖M.value π‖ :=
+          add_le_add h1 (mul_le_mul_of_nonneg_left h2 M.gamma_nonneg)
+  rw [le_div_iff₀ (by linarith)]
+  linarith
+
+/-- **L16.** Values move continuously with the policy. If the action distributions of `π`
+and `π'` differ by at most `δ` in l1 at every state, the values differ by at most
+`‖r‖ δ / (1 - γ)²`. Not in the book. It replaces the book's assumption, at the start of
+Section 9.1, that derivatives can be exchanged with infinite sums. -/
+theorem norm_value_sub_value_le [Nonempty S] (π π' : StationaryPolicy S A) {δ : ℝ}
+    (hδ : ∀ s, ∑ a, |π'.prob s a - π.prob s a| ≤ δ) :
+    ‖M.value π' - M.value π‖ ≤ ‖M.r‖ * δ / (1 - (M.γ : ℝ)) ^ 2 := by
+  have hγ1 : (M.γ : ℝ) < 1 := by exact_mod_cast M.γ_lt_one
+  have hpos : 0 < 1 - (M.γ : ℝ) := by linarith
+  have hδ0 : 0 ≤ δ := by
+    obtain ⟨s₀⟩ := ‹Nonempty S›
+    exact (Finset.sum_nonneg fun a _ => abs_nonneg _).trans (hδ s₀)
+  have hC : 0 ≤ δ * (‖M.r‖ / (1 - (M.γ : ℝ))) :=
+    mul_nonneg hδ0 (div_nonneg (norm_nonneg _) hpos.le)
+  -- the averaged advantage is small at every state
+  have havg : ‖π'.avg (M.advantage π)‖ ≤ δ * (‖M.r‖ / (1 - (M.γ : ℝ))) := by
+    rw [pi_norm_le_iff_of_nonneg hC]
+    intro s
+    rw [Real.norm_eq_abs, M.avg_advantage_eq π π' s]
+    calc |∑ a, (π'.prob s a - π.prob s a) * M.qValue π s a|
+        ≤ ∑ a, |π'.prob s a - π.prob s a| * |M.qValue π s a| := by
+          refine (Finset.abs_sum_le_sum_abs _ _).trans (le_of_eq ?_)
+          refine Finset.sum_congr rfl fun a _ => ?_
+          rw [abs_mul]
+      _ ≤ ∑ a, |π'.prob s a - π.prob s a| * (‖M.r‖ / (1 - (M.γ : ℝ))) := by
+          refine Finset.sum_le_sum fun a _ => mul_le_mul_of_nonneg_left ?_ (abs_nonneg _)
+          have h := (norm_le_pi_norm (M.qValue π s) a).trans (norm_le_pi_norm (M.qValue π) s)
+          rw [Real.norm_eq_abs] at h
+          exact h.trans (M.norm_qValue_le π)
+      _ = (∑ a, |π'.prob s a - π.prob s a|) * (‖M.r‖ / (1 - (M.γ : ℝ))) := by
+          rw [Finset.sum_mul]
+      _ ≤ δ * (‖M.r‖ / (1 - (M.γ : ℝ))) :=
+          mul_le_mul_of_nonneg_right (hδ s) (div_nonneg (norm_nonneg _) hpos.le)
+  -- by L12 the difference of values is a value with this averaged reward
+  rw [M.value_sub_value_eq π' π]
+  calc ‖(M.withReward (M.advantage π)).value π'‖
+      ≤ ‖(M.withReward (M.advantage π)).rewardPi π'‖ / (1 - (M.γ : ℝ)) :=
+        (M.withReward (M.advantage π)).norm_value_le_rewardPi π'
+    _ ≤ δ * (‖M.r‖ / (1 - (M.γ : ℝ))) / (1 - (M.γ : ℝ)) :=
+        div_le_div_of_nonneg_right havg hpos.le
+    _ = ‖M.r‖ * δ / (1 - (M.γ : ℝ)) ^ 2 := by
+        rw [mul_div_assoc', div_div, ← sq, mul_comm δ]
+
+end FiniteMDP
+
+/-! End of step 2. -/
+
 end Learning
