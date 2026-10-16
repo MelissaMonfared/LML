@@ -429,4 +429,85 @@ theorem unionBound_le_of_threshold_le [Nonempty S] {δ t : ℝ} (hδ : 0 < δ) (
 
 /-! End of step 4. -/
 
+/-! ## Step 5. Book Proposition 2.1 with explicit constants (T4) -/
+
+namespace FiniteMDP
+
+namespace GenerativeSamples
+
+variable {M : FiniteMDP S A} {N : ℕ} {μ : Measure Ω} (G : M.GenerativeSamples N μ)
+
+/-- **T4.** Book Proposition 2.1 with explicit constants. Suppose the rewards are bounded by one
+and `N ≥ 2 (|S| log 2 + log (|S| |A| / δ)) / ((1 - γ)⁴ ε²)`. Then with probability at least
+`1 - δ`, the empirical model is `(1 - γ)² ε` close to `P` in l1 at every pair, every stationary
+policy has its Q-function within `ε`, the optimal Q-functions are within `ε`, and the optimal
+policy of the empirical model is `2 ε`-optimal in the true model. -/
+theorem sampleComplexity [Nonempty S] [IsProbabilityMeasure μ] (hN0 : 0 < N) (hr1 : ‖M.r‖ ≤ 1)
+    {ε δ : ℝ} (hε : 0 < ε) (hδ : 0 < δ)
+    (hN : 2 * (Fintype.card S * Real.log 2 + Real.log (Fintype.card S * Fintype.card A / δ)) /
+      ((1 - (M.γ : ℝ)) ^ 4 * ε ^ 2) ≤ N) :
+    1 - δ ≤ μ.real {ω |
+      (∀ s a, ∑ s', |G.empiricalP ω s a s' - M.P s a s'| ≤ (1 - (M.γ : ℝ)) ^ 2 * ε) ∧
+      (∀ π : StationaryPolicy S A, ‖M.qValue π - (G.empiricalMDP hN0 ω).qValue π‖ ≤ ε) ∧
+      dist M.optQ (G.empiricalMDP hN0 ω).optQ ≤ ε ∧
+      dist M.optQ (M.qValue (StationaryPolicy.ofDet (G.empiricalMDP hN0 ω).optPolicy)) ≤
+        2 * ε} := by
+  have hγ1 : (M.γ : ℝ) < 1 := by exact_mod_cast M.γ_lt_one
+  have hpos : 0 < 1 - (M.γ : ℝ) := by linarith
+  have ht : 0 < (1 - (M.γ : ℝ)) ^ 2 * ε := mul_pos (pow_pos hpos 2) hε
+  -- With l1 accuracy `(1 - γ)² ε`, the bound of R2 and R3 is at most `ε`.
+  have hkey : (M.γ : ℝ) * ((1 - (M.γ : ℝ)) ^ 2 * ε) * ‖M.r‖ / (1 - (M.γ : ℝ)) ^ 2 ≤ ε := by
+    rw [div_le_iff₀ (pow_pos hpos 2)]
+    have hγr : (M.γ : ℝ) * ‖M.r‖ ≤ 1 :=
+      (mul_le_of_le_one_left (norm_nonneg M.r) hγ1.le).trans hr1
+    nlinarith [mul_le_mul_of_nonneg_left hγr ht.le]
+  -- The bad event of C3 at accuracy `(1 - γ)² ε` has probability at most `δ`, by C4.
+  obtain ⟨B, hB⟩ : ∃ B : Set Ω, B = {ω | ∃ s a, (1 - (M.γ : ℝ)) ^ 2 * ε ≤
+      ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} := ⟨_, rfl⟩
+  have hbad : μ.real B ≤ δ := by
+    rw [hB]
+    refine (G.measureReal_exists_sum_abs_ge_le hN0 ht.le).trans ?_
+    refine unionBound_le_of_threshold_le hδ ht ?_
+    have h4 : ((1 - (M.γ : ℝ)) ^ 2 * ε) ^ 2 = (1 - (M.γ : ℝ)) ^ 4 * ε ^ 2 := by ring
+    rw [h4]
+    exact hN
+  have hcompl : 1 - δ ≤ μ.real Bᶜ := by
+    have h := measureReal_union_le (μ := μ) B Bᶜ
+    rw [Set.union_compl_self] at h
+    have h1 : μ.real (Set.univ : Set Ω) = 1 := by simp
+    linarith
+  -- Outside the bad event, R2 and R3 apply to the empirical model.
+  refine hcompl.trans (measureReal_mono ?_ (measure_ne_top _ _))
+  intro ω hω
+  rw [Set.mem_compl_iff] at hω
+  have hacc : ∀ s a, ∑ s', |G.empiricalP ω s a s' - M.P s a s'| ≤ (1 - (M.γ : ℝ)) ^ 2 * ε := by
+    intro s a
+    by_contra hcon
+    apply hω
+    rw [hB]
+    exact ⟨s, a, (not_le.mp hcon).le⟩
+  have hδ' : ∀ s a, ∑ s', |M.P s a s' - (G.empiricalMDP hN0 ω).P s a s'| ≤
+      (1 - (M.γ : ℝ)) ^ 2 * ε := by
+    intro s a
+    calc ∑ s', |M.P s a s' - (G.empiricalMDP hN0 ω).P s a s'|
+        = ∑ s', |G.empiricalP ω s a s' - M.P s a s'| := by
+          refine Finset.sum_congr rfl fun s' _ => ?_
+          rw [abs_sub_comm, G.empiricalMDP_P hN0 ω]
+      _ ≤ (1 - (M.γ : ℝ)) ^ 2 * ε := hacc s a
+  have hR2 : ∀ π : StationaryPolicy S A,
+      ‖M.qValue π - (G.empiricalMDP hN0 ω).qValue π‖ ≤ ε := fun π =>
+    (M.norm_qValue_sub_le_of_l1_le (G.empiricalMDP hN0 ω) (G.empiricalMDP_r hN0 ω)
+      (G.empiricalMDP_γ hN0 ω) hδ' π).trans hkey
+  have hR3 := M.dist_optQ_qValue_le_of_l1_le (G.empiricalMDP hN0 ω) (G.empiricalMDP_r hN0 ω)
+    (G.empiricalMDP_γ hN0 ω) hδ'
+  refine ⟨hacc, hR2, ?_, by linarith⟩
+  exact (M.dist_optQ_le_of_l1_le (G.empiricalMDP hN0 ω) (G.empiricalMDP_r hN0 ω)
+    (G.empiricalMDP_γ hN0 ω) hδ').trans hkey
+
+end GenerativeSamples
+
+end FiniteMDP
+
+/-! End of step 5. Priority 2 is complete. -/
+
 end Learning
