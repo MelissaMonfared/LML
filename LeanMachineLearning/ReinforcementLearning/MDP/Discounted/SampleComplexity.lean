@@ -393,4 +393,40 @@ end FiniteMDP
 
 /-! End of step 4, part 2. -/
 
+/-! ## Step 4, part 3. How many samples are enough (C4) -/
+
+/-- **C4.** The threshold. If `N ≥ 2 (|S| log 2 + log (|S| |A| / δ)) / t²`, the bound of C3 is
+at most `δ`. Book Proposition 2.1, last step of the proof, with the constant made explicit. -/
+theorem unionBound_le_of_threshold_le [Nonempty S] {δ t : ℝ} (hδ : 0 < δ) (ht : 0 < t)
+    {N : ℕ} (hN : 2 * (Fintype.card S * Real.log 2 +
+      Real.log (Fintype.card S * Fintype.card A / δ)) / t ^ 2 ≤ N) :
+    Fintype.card S * Fintype.card A * 2 ^ Fintype.card S *
+      Real.exp (-((N : ℝ) * t ^ 2) / 2) ≤ δ := by
+  have hS : (0 : ℝ) < Fintype.card S := Nat.cast_pos.mpr Fintype.card_pos
+  have hA : (0 : ℝ) < Fintype.card A := Nat.cast_pos.mpr Fintype.card_pos
+  have hK : (0 : ℝ) < Fintype.card S * Fintype.card A := mul_pos hS hA
+  have h2 : (0 : ℝ) < 2 ^ Fintype.card S := by positivity
+  have hX : (0 : ℝ) < Fintype.card S * Fintype.card A * 2 ^ Fintype.card S := mul_pos hK h2
+  -- The logarithm of `|S| |A| 2 ^ |S| / δ` is half the numerator of the threshold.
+  have hlog : Real.log (Fintype.card S * Fintype.card A * 2 ^ Fintype.card S / δ) =
+      Fintype.card S * Real.log 2 + Real.log (Fintype.card S * Fintype.card A / δ) := by
+    rw [mul_div_right_comm, Real.log_mul (div_pos hK hδ).ne' h2.ne', Real.log_pow]
+    ring
+  have hexp : -((N : ℝ) * t ^ 2) / 2 ≤
+      -Real.log (Fintype.card S * Fintype.card A * 2 ^ Fintype.card S / δ) := by
+    rw [hlog]
+    have := (div_le_iff₀ (pow_pos ht 2)).mp hN
+    linarith
+  calc (Fintype.card S : ℝ) * Fintype.card A * 2 ^ Fintype.card S *
+        Real.exp (-((N : ℝ) * t ^ 2) / 2)
+      ≤ Fintype.card S * Fintype.card A * 2 ^ Fintype.card S *
+        Real.exp (-Real.log (Fintype.card S * Fintype.card A * 2 ^ Fintype.card S / δ)) :=
+        mul_le_mul_of_nonneg_left (Real.exp_le_exp.mpr hexp) hX.le
+    _ = δ := by
+        rw [Real.exp_neg, Real.exp_log (div_pos hX hδ), inv_div, mul_div_assoc',
+          div_eq_iff hX.ne']
+        ring
+
+/-! End of step 4. -/
+
 end Learning
