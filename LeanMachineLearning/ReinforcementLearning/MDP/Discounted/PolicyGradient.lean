@@ -477,4 +477,104 @@ end FiniteMDP
 
 /-! End of step 3. -/
 
+/-! ## Step 4. Softmax policies (D9, L17) -/
+
+/-- The softmax probabilities, `exp θ(s, a) / ∑ b, exp θ(s, b)`. -/
+def softmaxProb (θ : S → A → ℝ) (s : S) (a : A) : ℝ :=
+  Real.exp (θ s a) / ∑ b, Real.exp (θ s b)
+
+theorem softmaxProb_pos (θ : S → A → ℝ) (s : S) (a : A) : 0 < softmaxProb θ s a := by
+  unfold softmaxProb
+  exact div_pos (Real.exp_pos _) (Finset.sum_pos (fun _ _ => Real.exp_pos _) Finset.univ_nonempty)
+
+/-- **D9.** The softmax policy of book Example 9.1. -/
+def StationaryPolicy.softmax (θ : S → A → ℝ) : StationaryPolicy S A where
+  prob := softmaxProb θ
+  nonneg s a := (softmaxProb_pos θ s a).le
+  sum_eq_one s := by
+    unfold softmaxProb
+    rw [← Finset.sum_div]
+    exact div_self (Finset.sum_pos (fun _ _ => Real.exp_pos _) Finset.univ_nonempty).ne'
+
+/-- Along the path `θ + t e`, the softmax probabilities written with exponentials. -/
+theorem softmaxProb_add_smul (θ e : S → A → ℝ) (t : ℝ) (s : S) (a : A) :
+    softmaxProb (θ + t • e) s a =
+      Real.exp (θ s a + t * e s a) / ∑ b, Real.exp (θ s b + t * e s b) := by
+  simp only [softmaxProb, Pi.add_apply, Pi.smul_apply, smul_eq_mul]
+
+/-- **L17.** The derivative of `log π_θ(a | s)` for the softmax policy along the path
+`θ + t e`, in any direction `e`. It is `e(s, a)` minus the softmax average of `e(s, ·)`. -/
+theorem hasDerivAt_log_softmaxProb (θ e : S → A → ℝ) (t₀ : ℝ) (s : S) (a : A) :
+    HasDerivAt (fun t : ℝ => Real.log (softmaxProb (θ + t • e) s a))
+      (e s a - ∑ b, softmaxProb (θ + t₀ • e) s b * e s b) t₀ := by
+  -- the exponents move linearly with `t`
+  have hlin : ∀ b, HasDerivAt (fun t : ℝ => θ s b + t * e s b) (e s b) t₀ := by
+    intro b
+    have h := ((hasDerivAt_id' t₀).mul_const (e s b)).const_add (θ s b)
+    rwa [one_mul] at h
+  -- the sum of the exponentials is differentiable and positive
+  have hsum : HasDerivAt (fun t : ℝ => ∑ c, Real.exp (θ s c + t * e s c))
+      (∑ c, Real.exp (θ s c + t₀ * e s c) * e s c) t₀ :=
+    HasDerivAt.fun_sum fun c _ => (hlin c).exp
+  have hpos : ∀ t : ℝ, 0 < ∑ c, Real.exp (θ s c + t * e s c) := fun _ =>
+    Finset.sum_pos (fun _ _ => Real.exp_pos _) Finset.univ_nonempty
+  -- the log of a softmax probability is the exponent minus the log of the sum
+  have hfun : (fun t : ℝ => Real.log (softmaxProb (θ + t • e) s a)) =
+      fun t : ℝ => θ s a + t * e s a - Real.log (∑ c, Real.exp (θ s c + t * e s c)) := by
+    funext t
+    rw [softmaxProb_add_smul, Real.log_div (Real.exp_pos _).ne' (hpos t).ne', Real.log_exp]
+  -- the derivative of the log of the sum is the softmax average of `e`
+  have hval : (∑ c, Real.exp (θ s c + t₀ * e s c) * e s c) /
+      (∑ c, Real.exp (θ s c + t₀ * e s c)) = ∑ b, softmaxProb (θ + t₀ • e) s b * e s b := by
+    rw [Finset.sum_div]
+    refine Finset.sum_congr rfl fun b _ => ?_
+    rw [softmaxProb_add_smul]
+    ring
+  have h := (hlin a).fun_sub (hsum.log (hpos t₀).ne')
+  rw [hval] at h
+  rw [hfun]
+  exact h
+
+/-- **L17.** The derivative of the softmax probabilities along the path `θ + t e`. It is
+`π_θ(a | s)` times the derivative of its log, and it is the form that T6 puts into T5. -/
+theorem hasDerivAt_softmaxProb (θ e : S → A → ℝ) (t₀ : ℝ) (s : S) (a : A) :
+    HasDerivAt (fun t : ℝ => softmaxProb (θ + t • e) s a)
+      (softmaxProb (θ + t₀ • e) s a *
+        (e s a - ∑ b, softmaxProb (θ + t₀ • e) s b * e s b)) t₀ := by
+  have h := (hasDerivAt_log_softmaxProb θ e t₀ s a).exp
+  rw [Real.exp_log (softmaxProb_pos _ s a)] at h
+  have hfun : (fun t : ℝ => Real.exp (Real.log (softmaxProb (θ + t • e) s a))) =
+      fun t : ℝ => softmaxProb (θ + t • e) s a :=
+    funext fun _ => Real.exp_log (softmaxProb_pos _ s a)
+  rw [hfun] at h
+  exact h
+
+/-- The indicator of the state-action pair `(s', a')`, the direction of the coordinate
+`θ(s', a')`. -/
+def pairIndicator (s' : S) (a' : A) : S → A → ℝ := fun s a => if s = s' ∧ a = a' then 1 else 0
+
+/-- The softmax average of the indicator of `(s', a')` at the state `s`. -/
+theorem sum_softmaxProb_mul_pairIndicator (θ : S → A → ℝ) (s' : S) (a' : A) (s : S) :
+    ∑ b, softmaxProb θ s b * pairIndicator s' a' s b =
+      if s = s' then softmaxProb θ s a' else 0 := by
+  by_cases hs : s = s'
+  · subst hs
+    simp [pairIndicator, mul_ite]
+  · simp [pairIndicator, hs]
+
+/-- **L17.** The book's coordinate formula, Section 10.2. Moving only `θ(s', a')`, the
+derivative of `log π_θ(a | s)` is `1[s = s'] (1[a = a'] - π_θ(a' | s))`. -/
+theorem hasDerivAt_log_softmaxProb_coord (θ : S → A → ℝ) (s' : S) (a' : A) (s : S) (a : A) :
+    HasDerivAt (fun t : ℝ => Real.log (softmaxProb (θ + t • pairIndicator s' a') s a))
+      ((if s = s' then 1 else 0) * ((if a = a' then 1 else 0) - softmaxProb θ s a')) 0 := by
+  have h := hasDerivAt_log_softmaxProb θ (pairIndicator s' a') 0 s a
+  simp only [zero_smul, add_zero, sum_softmaxProb_mul_pairIndicator] at h
+  have hval : pairIndicator s' a' s a - (if s = s' then softmaxProb θ s a' else 0) =
+      (if s = s' then 1 else 0) * ((if a = a' then 1 else 0) - softmaxProb θ s a') := by
+    by_cases hs : s = s' <;> by_cases ha : a = a' <;> simp [pairIndicator, hs, ha]
+  rw [hval] at h
+  exact h
+
+/-! End of step 4. -/
+
 end Learning
