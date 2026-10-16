@@ -308,4 +308,89 @@ end FiniteMDP
 
 /-! End of step 3. -/
 
+/-! ## Step 4, part 1. From sign patterns to the l1 error at one pair (C2) -/
+
+namespace FiniteMDP
+
+namespace GenerativeSamples
+
+variable {M : FiniteMDP S A} {N : ℕ} {μ : Measure Ω} (G : M.GenerativeSamples N μ)
+
+/-- **C2.** The l1 error of the empirical model at one pair is at least `t` with probability at
+most `2 ^ |S| exp (-N t² / 2)`. A union bound over the sign patterns of R1, each bounded by
+C1. -/
+theorem measureReal_sum_abs_ge_le [IsProbabilityMeasure μ] (hN : 0 < N) (s : S) (a : A)
+    {t : ℝ} (ht : 0 ≤ t) :
+    μ.real {ω | t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} ≤
+      2 ^ Fintype.card S * Real.exp (-((N : ℝ) * t ^ 2) / 2) := by
+  have hsub : {ω | t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} ⊆
+      ⋃ b : S → Bool, {ω | t ≤ ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s')} := by
+    intro ω hω
+    rw [Set.mem_setOf_eq] at hω
+    obtain ⟨b, hb⟩ :=
+      exists_sum_signOf_mul_eq_sum_abs fun s' => G.empiricalP ω s a s' - M.P s a s'
+    rw [Set.mem_iUnion]
+    refine ⟨b, ?_⟩
+    rw [Set.mem_setOf_eq, hb]
+    exact hω
+  calc μ.real {ω | t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|}
+      ≤ μ.real (⋃ b : S → Bool,
+          {ω | t ≤ ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s')}) :=
+        measureReal_mono hsub (measure_ne_top _ _)
+    _ ≤ ∑ b : S → Bool,
+          μ.real {ω | t ≤ ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s')} :=
+        measureReal_iUnion_fintype_le _
+    _ ≤ ∑ _b : S → Bool, Real.exp (-((N : ℝ) * t ^ 2) / 2) :=
+        Finset.sum_le_sum fun b _ => G.measureReal_sum_signOf_ge_le hN b s a ht
+    _ = 2 ^ Fintype.card S * Real.exp (-((N : ℝ) * t ^ 2) / 2) := by
+        rw [Finset.sum_const, Finset.card_univ, card_signPatterns, nsmul_eq_mul]
+        norm_num
+
+end GenerativeSamples
+
+end FiniteMDP
+
+/-! End of step 4, part 1. -/
+
+/-! ## Step 4, part 2. All state-action pairs at once (C3) -/
+
+namespace FiniteMDP
+
+namespace GenerativeSamples
+
+variable {M : FiniteMDP S A} {N : ℕ} {μ : Measure Ω} (G : M.GenerativeSamples N μ)
+
+/-- **C3.** The probability that the empirical model is `t` or more away from `P` in l1 at some
+state-action pair is at most `|S| |A| 2 ^ |S| exp (-N t² / 2)`. A union bound over the pairs,
+each bounded by C2. -/
+theorem measureReal_exists_sum_abs_ge_le [IsProbabilityMeasure μ] (hN : 0 < N) {t : ℝ}
+    (ht : 0 ≤ t) :
+    μ.real {ω | ∃ s a, t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} ≤
+      Fintype.card S * Fintype.card A * 2 ^ Fintype.card S *
+        Real.exp (-((N : ℝ) * t ^ 2) / 2) := by
+  have hsub : {ω | ∃ s a, t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} ⊆
+      ⋃ p : S × A, {ω | t ≤ ∑ s', |G.empiricalP ω p.1 p.2 s' - M.P p.1 p.2 s'|} := by
+    intro ω hω
+    obtain ⟨s, a, h⟩ := hω
+    exact Set.mem_iUnion.mpr ⟨(s, a), h⟩
+  calc μ.real {ω | ∃ s a, t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|}
+      ≤ μ.real (⋃ p : S × A,
+          {ω | t ≤ ∑ s', |G.empiricalP ω p.1 p.2 s' - M.P p.1 p.2 s'|}) :=
+        measureReal_mono hsub (measure_ne_top _ _)
+    _ ≤ ∑ p : S × A,
+          μ.real {ω | t ≤ ∑ s', |G.empiricalP ω p.1 p.2 s' - M.P p.1 p.2 s'|} :=
+        measureReal_iUnion_fintype_le _
+    _ ≤ ∑ _p : S × A, 2 ^ Fintype.card S * Real.exp (-((N : ℝ) * t ^ 2) / 2) :=
+        Finset.sum_le_sum fun p _ => G.measureReal_sum_abs_ge_le hN p.1 p.2 ht
+    _ = Fintype.card S * Fintype.card A * 2 ^ Fintype.card S *
+          Real.exp (-((N : ℝ) * t ^ 2) / 2) := by
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_prod, nsmul_eq_mul, Nat.cast_mul]
+        ring
+
+end GenerativeSamples
+
+end FiniteMDP
+
+/-! End of step 4, part 2. -/
+
 end Learning
