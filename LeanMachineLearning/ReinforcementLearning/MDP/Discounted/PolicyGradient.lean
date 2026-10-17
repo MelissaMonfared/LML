@@ -170,7 +170,7 @@ theorem occupancy_ge {μ : S → ℝ} (hμ : ∀ s, 0 ≤ μ s) (π : Stationary
         (M.γ : ℝ) * ∑ t', M.transPi π s t' * V t' := by
       rw [hV]
       exact (congrFun ((M.withReward (stateIndicator s)).evalOp_value π) s).symm
-    rw [avg_stateIndicator, if_pos rfl] at h
+    rw [avg_stateIndicator, ite_eq_left rfl] at h
     have hrest : 0 ≤ (M.γ : ℝ) * ∑ t', M.transPi π s t' * V t' :=
       mul_nonneg M.gamma_nonneg
         (Finset.sum_nonneg fun t' _ => mul_nonneg (M.transPi_nonneg π s t') (hnn t'))
@@ -308,7 +308,7 @@ over all states. -/
 theorem StationaryPolicy.sum_abs_sub_le_sum_sum (π π' : StationaryPolicy S A) (s : S) :
     ∑ a, |π'.prob s a - π.prob s a| ≤ ∑ s', ∑ a, |π'.prob s' a - π.prob s' a| :=
   Finset.single_le_sum (f := fun s' => ∑ a, |π'.prob s' a - π.prob s' a|)
-    (fun s' _ => Finset.sum_nonneg fun a _ => abs_nonneg _) (Finset.mem_univ s)
+    (fun _ _ => Finset.sum_nonneg fun _ _ => abs_nonneg _) (Finset.mem_univ s)
 
 namespace FiniteMDP
 

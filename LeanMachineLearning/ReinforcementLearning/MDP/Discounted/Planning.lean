@@ -420,16 +420,16 @@ theorem value_eq_avg_qValue (π : StationaryPolicy S A) : M.value π = π.avg (M
           (M.γ : ℝ) * (π.prob s a * ∑ s', M.P s a s' * M.value π s')) := by
         rw [Finset.sum_add_distrib, Finset.mul_sum]
     _ = π.avg (M.qValue π) s := by
-        show _ = ∑ a, π.prob s a * M.qValue π s a
+        change _ = ∑ a, π.prob s a * M.qValue π s a
         refine Finset.sum_congr rfl fun a _ => ?_
-        show _ = π.prob s a * (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π s')
+        change _ = π.prob s a * (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π s')
         ring
 
 /-- **L7.** Bellman consistency for Q-functions. -/
 theorem evalOpQ_qValue (π : StationaryPolicy S A) :
     M.evalOpQ π (M.qValue π) = M.qValue π := by
   funext s a
-  show M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * π.avg (M.qValue π) s' =
+  change M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * π.avg (M.qValue π) s' =
     M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π s'
   rw [← M.value_eq_avg_qValue π]
 
@@ -580,7 +580,7 @@ theorem evalOpQ_greedy (Q : S → A → ℝ) :
   have h : ∀ s', (StationaryPolicy.ofDet (greedy Q)).avg Q s' = maxQ Q s' := fun s' => by
     rw [StationaryPolicy.avg_ofDet, maxQ_eq_greedy]
   funext s a
-  show M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * (StationaryPolicy.ofDet (greedy Q)).avg Q s' =
+  change M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * (StationaryPolicy.ofDet (greedy Q)).avg Q s' =
     M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * maxQ Q s'
   simp only [h]
 
@@ -594,7 +594,7 @@ theorem evalOpQ_le_optOp (π : StationaryPolicy S A) (Q : S → A → ℝ) :
   have hsum : ∑ s', M.P s a s' * π.avg Q s' ≤ ∑ s', M.P s a s' * maxQ Q s' :=
     sum_mul_le_sum_mul (M.P_nonneg s a) havg
   have hmul := mul_le_mul_of_nonneg_left hsum M.gamma_nonneg
-  show M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * π.avg Q s' ≤
+  change M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * π.avg Q s' ≤
     M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * maxQ Q s'
   linarith
 
@@ -603,7 +603,7 @@ restricted to stationary policies. -/
 theorem qValue_optPolicy : M.qValue (StationaryPolicy.ofDet M.optPolicy) = M.optQ := by
   symm
   apply M.eq_qValue_of_evalOpQ_eq
-  show M.evalOpQ (StationaryPolicy.ofDet (greedy M.optQ)) M.optQ = M.optQ
+  change M.evalOpQ (StationaryPolicy.ofDet (greedy M.optQ)) M.optQ = M.optQ
   rw [M.evalOpQ_greedy, M.optOp_optQ]
 
 /-- **T1 (i).** The same statement for values. -/
@@ -677,7 +677,7 @@ theorem optV_le_optQ_greedy (Q : S → A → ℝ) (s : S) :
   have hmax : maxQ M.optQ s - maxQ Q s ≤ dist Q M.optQ := (le_abs_self _).trans (h.trans h')
   have hg : maxQ Q s = Q s (greedy Q s) := maxQ_eq_greedy Q s
   have hq := (abs_sub_le_iff.mp (abs_sub_apply_le_dist Q M.optQ s (greedy Q s))).1
-  show maxQ M.optQ s ≤ M.optQ s (greedy Q s) + 2 * dist Q M.optQ
+  change maxQ M.optQ s ≤ M.optQ s (greedy Q s) + 2 * dist Q M.optQ
   linarith
 
 /-- One Bellman step links `optQ` and the value of the greedy policy at the greedy action. -/
@@ -686,7 +686,7 @@ theorem optQ_greedy_sub_value (Q : S → A → ℝ) (s : S) :
       (M.γ : ℝ) * ∑ s', M.P s (greedy Q s) s' *
         (M.optV s' - M.value (StationaryPolicy.ofDet (greedy Q)) s') := by
   rw [M.optQ_eq, M.value_ofDet]
-  show M.r s (greedy Q s) + (M.γ : ℝ) * ∑ s', M.P s (greedy Q s) s' * M.optV s' -
+  change M.r s (greedy Q s) + (M.γ : ℝ) * ∑ s', M.P s (greedy Q s) s' * M.optV s' -
       (M.r s (greedy Q s) + (M.γ : ℝ) * ∑ s', M.P s (greedy Q s) s' *
         M.value (StationaryPolicy.ofDet (greedy Q)) s') = _
   simp only [mul_sub, Finset.sum_sub_distrib]
@@ -930,7 +930,7 @@ def advantage (π : StationaryPolicy S A) : S → A → ℝ :=
 /-- Averaging one policy's Q-function under another policy is one evaluation step. -/
 theorem avg_qValue_eq_evalOp (π π' : StationaryPolicy S A) (s : S) :
     π.avg (M.qValue π') s = M.evalOp π (M.value π') s := by
-  show ∑ a, π.prob s a * (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π' s') =
+  change ∑ a, π.prob s a * (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π' s') =
     ∑ a, π.prob s a * M.r s a + (M.γ : ℝ) * ∑ s', M.transPi π s s' * M.value π' s'
   rw [M.sum_transPi_mul π s (M.value π'), Finset.mul_sum, ← Finset.sum_add_distrib]
   refine Finset.sum_congr rfl fun a _ => ?_
@@ -948,7 +948,7 @@ theorem value_sub_value_eq (π π' : StationaryPolicy S A) :
   have h2 := M.avg_qValue_eq_evalOp π π' s
   have hsplit : (M.withReward (M.advantage π')).rewardPi π s =
       π.avg (M.qValue π') s - M.value π' s := by
-    show ∑ a, π.prob s a * (M.qValue π' s a - M.value π' s) = _
+    change ∑ a, π.prob s a * (M.qValue π' s a - M.value π' s) = _
     simp only [mul_sub, Finset.sum_sub_distrib, ← Finset.sum_mul, π.sum_eq_one s, one_mul]
     rfl
   have h3 : ∑ s', M.transPi π s s' * (M.value π - M.value π') s' =
@@ -956,7 +956,7 @@ theorem value_sub_value_eq (π π' : StationaryPolicy S A) :
     simp only [Pi.sub_apply, mul_sub, Finset.sum_sub_distrib]
   have h4 : M.evalOp π (M.value π') s =
       M.rewardPi π s + (M.γ : ℝ) * ∑ s', M.transPi π s s' * M.value π' s' := rfl
-  show (M.withReward (M.advantage π')).rewardPi π s +
+  change (M.withReward (M.advantage π')).rewardPi π s +
       (M.γ : ℝ) * ∑ s', M.transPi π s s' * (M.value π - M.value π') s' =
     M.value π s - M.value π' s
   rw [hsplit, h2, h3, h4]
@@ -987,7 +987,7 @@ theorem value_le_value_greedy (π : StationaryPolicy S A) :
   apply M.value_le_value_of_avg_advantage_nonneg
   intro s
   rw [StationaryPolicy.avg_ofDet]
-  show 0 ≤ M.qValue π s (greedy (M.qValue π) s) - M.value π s
+  change 0 ≤ M.qValue π s (greedy (M.qValue π) s) - M.value π s
   have hV : M.value π s = π.avg (M.qValue π) s := congrFun (M.value_eq_avg_qValue π) s
   have h1 := π.avg_le_maxQ (M.qValue π) s
   have h2 := maxQ_eq_greedy (M.qValue π) s
@@ -1017,11 +1017,11 @@ theorem qValue_sub_qValue_eq (M' : FiniteMDP S A) (hr : M'.r = M.r) (hγ : M'.γ
     intro s'
     rw [congrFun (M.value_eq_avg_qValue π) s', congrFun (M'.value_eq_avg_qValue π) s']
     simp only [StationaryPolicy.avg, Pi.sub_apply, mul_sub, Finset.sum_sub_distrib]
-  show (M.γ : ℝ) * ∑ s', (M.P s a s' - M'.P s a s') * M.value π s' +
+  change (M.γ : ℝ) * ∑ s', (M.P s a s' - M'.P s a s') * M.value π s' +
       (M'.γ : ℝ) * ∑ s', M'.P s a s' * π.avg (M.qValue π - M'.qValue π) s' =
     M.qValue π s a - M'.qValue π s a
   simp only [havg]
-  show _ = (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π s') -
+  change _ = (M.r s a + (M.γ : ℝ) * ∑ s', M.P s a s' * M.value π s') -
     (M'.r s a + (M'.γ : ℝ) * ∑ s', M'.P s a s' * M'.value π s')
   rw [hr, hγ]
   simp only [sub_mul, mul_sub, Finset.sum_sub_distrib]
@@ -1053,7 +1053,7 @@ theorem norm_qValue_sub_qValue_le (M' : FiniteMDP S A) (hr : M'.r = M.r) (hγ : 
     intro s
     rw [pi_norm_le_iff_of_nonneg hnn]
     intro a
-    show ‖(M.γ : ℝ) * ∑ s', (M.P s a s' - M'.P s a s') * M.value π s'‖ ≤
+    change ‖(M.γ : ℝ) * ∑ s', (M.P s a s' - M'.P s a s') * M.value π s'‖ ≤
       (M.γ : ℝ) * δ * ‖M.value π‖
     rw [Real.norm_eq_abs, abs_mul, abs_of_nonneg M.gamma_nonneg, mul_assoc]
     refine mul_le_mul_of_nonneg_left ?_ M.gamma_nonneg

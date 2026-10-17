@@ -217,14 +217,14 @@ theorem signOf_X_eq_sum (b : S → Bool) (s : S) (a : A) (i : Fin N) (ω : Ω) :
 theorem integrable_signOf_X [IsFiniteMeasure μ] (b : S → Bool) (s : S) (a : A) (i : Fin N) :
     Integrable (fun ω => signOf b (G.X s a i ω)) μ := by
   simp_rw [G.signOf_X_eq_sum b s a i]
-  exact integrable_finset_sum _ fun s' _ =>
+  exact integrable_finsetSum _ fun s' _ =>
     ((integrable_const (1 : ℝ)).indicator (G.measurableSet_X_eq s a i s')).const_mul _
 
 /-- The mean of the sign of one sample is the average of the sign pattern under `P`. -/
 theorem integral_signOf_X [IsFiniteMeasure μ] (b : S → Bool) (s : S) (a : A) (i : Fin N) :
     ∫ ω, signOf b (G.X s a i ω) ∂μ = ∑ s', signOf b s' * M.P s a s' := by
   simp_rw [G.signOf_X_eq_sum b s a i]
-  rw [integral_finset_sum]
+  rw [integral_finsetSum]
   · refine Finset.sum_congr rfl fun s' _ => ?_
     rw [integral_const_mul, integral_indicator_one (G.measurableSet_X_eq s a i s')]
     congr 1
@@ -281,7 +281,7 @@ theorem measureReal_sum_signOf_ge_le [IsProbabilityMeasure μ] (hN : 0 < N) (b :
   have hsub : {ω | t ≤ ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s')} ⊆
       {ω | (N : ℝ) * t ≤ ∑ i, (signOf b (G.X s a i ω) - m)} := by
     intro ω hω
-    simp only [Set.mem_setOf_eq] at hω ⊢
+    simp only [Set.mem_ofPred_eq] at hω ⊢
     have h1 := G.sum_signOf_mul_empiricalP b ω s a
     rw [eq_div_iff hNne] at h1
     have hkey : (N : ℝ) * ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s') =
@@ -326,12 +326,12 @@ theorem measureReal_sum_abs_ge_le [IsProbabilityMeasure μ] (hN : 0 < N) (s : S)
   have hsub : {ω | t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|} ⊆
       ⋃ b : S → Bool, {ω | t ≤ ∑ s', signOf b s' * (G.empiricalP ω s a s' - M.P s a s')} := by
     intro ω hω
-    rw [Set.mem_setOf_eq] at hω
+    rw [Set.mem_ofPred_eq] at hω
     obtain ⟨b, hb⟩ :=
       exists_sum_signOf_mul_eq_sum_abs fun s' => G.empiricalP ω s a s' - M.P s a s'
     rw [Set.mem_iUnion]
     refine ⟨b, ?_⟩
-    rw [Set.mem_setOf_eq, hb]
+    rw [Set.mem_ofPred_eq, hb]
     exact hω
   calc μ.real {ω | t ≤ ∑ s', |G.empiricalP ω s a s' - M.P s a s'|}
       ≤ μ.real (⋃ b : S → Bool,
